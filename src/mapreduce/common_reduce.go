@@ -1,5 +1,12 @@
 package mapreduce
 
+import (
+	"encoding/json"
+	"log"
+	"os"
+	"sort"
+)
+
 func doReduce(
 	jobName string, // the name of the whole MapReduce job
 	reduceTask int, // which reduce task this is
@@ -44,4 +51,48 @@ func doReduce(
 	//
 	// Your code here (Part I).
 	//
+	var kvs []KeyValue
+	for i := 0; i < nMap; i++ {
+		fileName := reduceName(jobName, i, reduceTask)
+		file, err := os.Open(fileName)
+		defer file.Close()
+		if err != nil {
+			log.Printf("open file failed: %v", err)
+			return
+		}
+		dec := json.NewDecoder(file)
+		var kv KeyValue
+		for dec.More() {
+			if err := dec.Decode(&kv); err != nil {
+				break
+			}
+			kvs = append(kvs, kv)
+		}
+	}
+	sort.Sort(sortKeyValue(kvs))
+	reduceInput := map[string][]string{}
+	for _, kv := range kvs {
+		if vs, ok := reduceInput[kv.Key]; ok {
+			vs = append(vs, kv.Value)
+		} else {
+			reduceInput[kv.Key] = []string{kv.Value}
+		}
+	}
+	file, err := os.Create(outFile)
+	defer file.Close()
+	if err != nil {
+		log.Printf("open output file failed: %v", err)
+		return
+	}
+
+	enc := json.NewEncoder(file)
+	for key, vs := range reduceInput {
+		enc.Encode(KeyValue{key, reduceF(key, vs)})
+	}
 }
+
+type sortKeyValue []KeyValue
+
+func (s sortKeyValue) Len() int           { return len(s) }
+func (s sortKeyValue) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
+func (s sortKeyValue) Less(i, j int) bool { return s[i].Key < s[j].Key }
