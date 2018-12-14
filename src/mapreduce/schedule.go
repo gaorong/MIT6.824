@@ -1,6 +1,9 @@
 package mapreduce
 
-import "fmt"
+import (
+	"fmt"
+	"sync"
+)
 
 //
 // schedule() starts and waits for all tasks in the given phase (mapPhase
@@ -30,5 +33,33 @@ func schedule(jobName string, mapFiles []string, nReduce int, phase jobPhase, re
 	//
 	// Your code here (Part III, Part IV).
 	//
+	var sw sync.WaitGroup
+	workderDoneChan := make(chan string, ntasks)
+	for i := 0; i < ntasks; i++ {
+		sw.Add(1) // must add WatiGroup before gotoutine start, cause maybe the groutine start after WaitGroup.Wait
+		go func(index int) {
+			defer sw.Done()
+			dta := DoTaskArgs{
+				JobName:       jobName,
+				File:          mapFiles[index],
+				Phase:         phase,
+				TaskNumber:    index,
+				NumOtherPhase: n_other,
+			}
+			for {
+				var address string
+				select {
+				case address = <-registerChan:
+				case address = <-workderDoneChan:
+				}
+				result := call(address, "Worker.DoTask", dta, nil)
+				if result {
+					workderDoneChan <- address
+					break
+				}
+			}
+		}(i)
+	}
+	sw.Wait()
 	fmt.Printf("Schedule: %v done\n", phase)
 }

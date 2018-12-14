@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"log"
 	"os"
-	"sort"
 )
 
 func doReduce(
@@ -61,22 +60,25 @@ func doReduce(
 			return
 		}
 		dec := json.NewDecoder(file)
-		var kv KeyValue
 		for dec.More() {
+			var kv KeyValue
 			if err := dec.Decode(&kv); err != nil {
-				break
+				log.Printf("decode file failed: %v", err)
+				return
 			}
 			kvs = append(kvs, kv)
 		}
 	}
-	sort.Sort(sortKeyValue(kvs))
 	reduceInput := map[string][]string{}
 	for _, kv := range kvs {
-		if vs, ok := reduceInput[kv.Key]; ok {
-			vs = append(vs, kv.Value)
-		} else {
-			reduceInput[kv.Key] = []string{kv.Value}
-		}
+		reduceInput[kv.Key] = append(reduceInput[kv.Key], kv.Value)
+
+		// leave this code to remember ashamed error, the vs is value-copyed array, and doesn't change map value by easyily modify vs
+		// if vs, ok := reduceInput[kv.Key]; ok {
+		// 	vs = append(vs, kv.Value)
+		// } else {
+		// 	reduceInput[kv.Key] = []string{kv.Value}
+		// }
 	}
 	file, err := os.Create(outFile)
 	defer file.Close()
@@ -90,9 +92,3 @@ func doReduce(
 		enc.Encode(KeyValue{key, reduceF(key, vs)})
 	}
 }
-
-type sortKeyValue []KeyValue
-
-func (s sortKeyValue) Len() int           { return len(s) }
-func (s sortKeyValue) Swap(i, j int)      { s[i], s[j] = s[j], s[i] }
-func (s sortKeyValue) Less(i, j int) bool { return s[i].Key < s[j].Key }
