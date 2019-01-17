@@ -266,43 +266,31 @@ func (rf *Raft) AppendEntries(args *AppendEntriesArgs, reply *AppendEntriesReply
 }
 
 func (rf *Raft) sendAppendEntries() {
-	for i := range rf.peers {
-		if i == rf.me {
-			continue
+	for {
+		if !rf.isLeader {
+			return
 		}
-		go func(index int) {
-			for {
-				select {
-				case <-rf.done:
-					return
-				case <-rf.heatbeatTicker.C:
-					if !rf.isLeader {
-						DPrintf("%d lost leader, exit append entry goroutine", rf.me)
-						return
-					}
-
-					args := &AppendEntriesArgs{
-						Term:     rf.currentTerm,
-						LeaderId: rf.me,
-					}
-					reply := &AppendEntriesReply{}
-
-					callResult := make(chan bool)
-					go func() {
-						DPrintf("%d send append request to peer %d: %+v time: %s", rf.me, index, args, time.Now().String())
-						callResult <- rf.peers[index].Call("Raft.AppendEntries", args, reply)
-					}()
-					select {
-					case r := <-callResult:
-						if !r {
-							DPrintf("%d send append request to peer %d failed", rf.me, index)
-						}
-					case <-time.After(constHeartbeatTimeout):
-						DPrintf("%d send append request to peer %d timeout", rf.me, index)
-					}
-				}
+		for i := range rf.peers {
+			if i == rf.me {
+				continue
 			}
-		}(i)
+			go func(i int) {
+				args := &AppendEntriesArgs{
+					Term:     rf.currentTerm,
+					LeaderId: rf.me,
+				}
+				reply := &AppendEntriesReply{}
+				DPrintf("%d send append request to peer %d: %+v time: %s", rf.me, i, args, time.Now().String())
+				r := rf.peers[i].Call("Raft.AppendEntries", args, reply)
+				if !r {
+				}
+			}(i)
+		}
+		select {
+		case <-rf.done:
+			return
+		case <-rf.heatbeatTicker.C:
+		}
 	}
 
 }
